@@ -137,20 +137,262 @@ export default {
   // Edição de PDF
   async editPdf(req, res) {
     try {
+      console.log('Requisição recebida para edição de PDF');
+      console.log('Headers:', req.headers);
+      console.log('Content-Type:', req.headers['content-type']);
+      console.log('Body keys:', Object.keys(req.body));
+      console.log('Body operations type:', typeof req.body.operations);
+      console.log('Body operations value:', req.body.operations);
+      console.log('Conteúdo completo do req.body:', req.body);
+      console.log('Valor bruto de req.body.operations:', req.body.operations);
+      
       if (!req.file) {
+        console.log('Erro: Nenhum arquivo enviado');
         return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       }
 
+      console.log('Arquivo recebido:', req.file.originalname, 'Tamanho:', req.file.size);
+      
       const buffer = req.file.buffer;
-      const operations = JSON.parse(req.body.operations || '[]');
+      let operations;
+      
+      // Tenta obter as operações do corpo da requisição
+      console.log('Corpo da requisição:', req.body);
+      console.log('Tipo de req.body.operations:', typeof req.body.operations);
+      
+      try {
+        // Novo bloco: Verificar se temos operation e options (formato alternativo)
+        if (req.body.operation && req.body.options) {
+          console.log('Usando formato operation + options');
+          const operationType = req.body.operation;
+          let options;
+          
+          try {
+            options = typeof req.body.options === 'string' ? JSON.parse(req.body.options) : req.body.options;
+            console.log('Options parseadas:', options);
+            
+            // Criar objeto de operação com base no tipo
+            if (operationType === 'rotate' && options.rotations) {
+              operations = [{
+                type: 'rotate',
+                rotations: options.rotations
+              }];
+              console.log('Operação de rotação construída:', operations);
+            } else {
+              // Para outros tipos de operações
+              operations = [{
+                type: operationType,
+                ...options
+              }];
+              console.log('Operação genérica construída:', operations);
+            }
+          } catch (e) {
+            console.error('Erro ao parsear options como JSON:', e);
+            return res.status(400).json({ error: 'Formato de options inválido', details: e.message });
+          }
+        }
+        // Verificar se temos campos separados para a operação (fallback)
+        else if (req.body.operationType) {
+          console.log('Usando campos separados para a operação');
+          
+          // Construir objeto de operação a partir dos campos separados
+          const operationType = req.body.operationType;
+          
+          if (operationType === 'rotate' && req.body.rotations) {
+  let rotations = [];
+
+  try {
+    // Tenta parsear como JSON
+    const parsed = JSON.parse(req.body.rotations);
+    if (Array.isArray(parsed)) {
+      rotations = parsed;
+    } else {
+      console.error('Rotations não é um array:', parsed);
+      return res.status(400).json({ error: 'Formato de rotations inválido' });
+    }
+  } catch (e) {
+    console.error('Erro ao parsear rotations:', e);
+    return res.status(400).json({ error: 'Rotations deve ser um JSON válido' });
+  }
+
+  // Garante que cada item tem page e degrees
+  const validRotations = rotations.filter(r => typeof r.page === 'number' && typeof r.degrees === 'number');
+  if (validRotations.length === 0) {
+    return res.status(400).json({ error: 'Nenhuma rotação válida encontrada em rotations' });
+  }
+
+  operations = [{
+    type: 'rotate',
+    rotations: validRotations
+  }];
+
+  console.log('Operação construída a partir de campos separados:', operations);
+} else {
+  console.log('Tipo de operação não suportado ou campos incompletos');
+  return res.status(400).json({ error: 'Tipo de operação não suportado ou campos incompletos' });
+}
+
+        } 
+        // Se não temos campos separados, tentar usar o campo operations
+        else if (req.body.operations) {
+          // Parsear as operações se for uma string JSON
+          if (typeof req.body.operations === 'string') {
+            try {
+              operations = JSON.parse(req.body.operations);
+              console.log('Operações parseadas de string JSON:', operations);
+            } catch (e) {
+              console.error('Erro ao parsear operations como JSON:', e);
+              return res.status(400).json({ error: 'Formato de operações inválido', details: e.message });
+            }
+          } else if (typeof req.body.operations === 'object') {
+            operations = req.body.operations;
+            console.log('Operações recebidas como objeto:', operations);
+          } else {
+            operations = [];
+            console.log('Nenhuma operação encontrada no corpo da requisição');
+          }
+          
+          console.log('Tipo de operations após processamento:', typeof operations);
+          
+          // Normalizar para garantir que temos um array de operações
+          if (operations && !Array.isArray(operations) && typeof operations === 'object' && operations.type) {
+            // Se for um objeto único com propriedade 'type', colocamos em um array
+            operations = [operations];
+            console.log('Operação única convertida para array:', operations);
+          }
+        } else {
+          operations = [];
+          console.log('Nenhuma operação encontrada no corpo da requisição');
+        }
+        
+        // Verificar se temos operações válidas
+        if (!operations || !Array.isArray(operations)) {
+          console.error('Erro: operations não é um array após processamento');
+          return res.status(400).json({ error: 'Formato de operações inválido', details: 'As operações devem ser um array ou um objeto com propriedade type' });
+        }
+        
+        console.log('Array de operações com', operations.length, 'item(s)');
+        operations.forEach((op, index) => {
+          console.log(`Operação ${index}:`, op);
+          console.log(`Tipo da operação ${index}:`, op.type);
+        });
+      } catch (parseError) {
+        console.error('Erro ao processar operações:', parseError);
+        return res.status(400).json({ error: 'Formato de operações inválido', details: parseError.message });
+      }
+      
+      // Imprime o conteúdo exato das operações para depuração
+      console.log('Conteúdo exato das operações:', JSON.stringify(operations, null, 2));
+
+      // Garante que operations seja um array
+      if (!Array.isArray(operations)) {
+        operations = [operations];
+        console.log('Convertendo operação única para array:', operations);
+      }
+      
+      // Verifica se cada operação tem um tipo válido
+      for (let i = 0; i < operations.length; i++) {
+        console.log(`Verificando operação ${i}:`, operations[i]);
+        if (!operations[i].type) {
+          console.error(`Erro: Operação ${i} não tem um tipo definido`);
+          return res.status(400).json({ error: 'Formato de operação inválido', details: `Operação ${i} não tem um tipo definido` });
+        }
+      }
 
       if (!operations || operations.length === 0) {
+        console.log('Erro: Nenhuma operação especificada');
         return res.status(400).json({ error: 'Nenhuma operação especificada' });
       }
 
-      const edited = await editPdf(buffer, operations);
-      res.set('Content-Type', 'application/pdf');
-      res.send(edited);
+      console.log('Iniciando edição do PDF com', operations.length, 'operações');
+      console.log('Chamando editPdf com operações:', JSON.stringify(operations));
+      
+      // Verificar e corrigir cada operação antes de enviar para o editor
+      for (let i = 0; i < operations.length; i++) {
+        console.log(`Verificando operação ${i} antes de enviar:`, operations[i]);
+        
+        // Garantir que o tipo está definido
+        if (!operations[i].type && operations[i].operationType) {
+          console.log(`Corrigindo operação ${i}: usando operationType como type`);
+          operations[i].type = operations[i].operationType;
+        }
+        
+        // Verificar se o tipo está definido após a correção
+        if (!operations[i].type) {
+          console.error(`Erro: Operação ${i} não tem um tipo definido após correção`);
+          return res.status(400).json({ error: 'Formato de operação inválido', details: `Operação ${i} não tem um tipo definido` });
+        }
+        
+        console.log(`Operação ${i} após verificação:`, operations[i]);
+      }
+      
+      try {
+        // Garantir que cada operação tenha um tipo definido e normalizado
+        for (let i = 0; i < operations.length; i++) {
+          console.log(`Verificando e normalizando operação ${i}:`, JSON.stringify(operations[i]));
+          
+          // Verificar se o tipo está definido em algum lugar
+          if (!operations[i].type && operations[i].operationType) {
+            console.log(`Operação ${i}: Usando operationType (${operations[i].operationType}) como type`);
+            operations[i].type = operations[i].operationType;
+          }
+          
+          // Se ainda não tiver tipo, tentar extrair do campo operations como string
+          if (!operations[i].type && req.body.operations && typeof req.body.operations === 'string') {
+            try {
+              console.log(`Operação ${i}: Tentando extrair tipo da string operations`);
+              const parsedOps = JSON.parse(req.body.operations);
+              if (Array.isArray(parsedOps) && parsedOps[i] && parsedOps[i].type) {
+                operations[i].type = parsedOps[i].type;
+                console.log(`Operação ${i}: Tipo extraído do array operations[${i}].type: ${operations[i].type}`);
+              } else if (!Array.isArray(parsedOps) && parsedOps.type) {
+                operations[i].type = parsedOps.type;
+                console.log(`Operação ${i}: Tipo extraído do objeto operations.type: ${operations[i].type}`);
+              }
+            } catch (e) {
+              console.error('Erro ao tentar extrair tipo da string operations:', e);
+            }
+          }
+          
+          // Verificar novamente se o tipo está definido
+          if (!operations[i].type) {
+            console.error(`Erro: Operação ${i} não tem um tipo definido após todas as tentativas`);
+            return res.status(400).json({ error: 'Formato de operação inválido', details: `Operação ${i} não tem um tipo definido após todas as tentativas` });
+          }
+          
+          console.log(`Operação ${i} final:`, JSON.stringify(operations[i]));
+        }
+        
+        // Verificação final antes de chamar editPdf
+        for (let i = 0; i < operations.length; i++) {
+          console.log(`Verificação final da operação ${i}:`, JSON.stringify(operations[i]));
+          
+          // Garantir que o tipo está definido e é uma string
+          if (!operations[i].type) {
+            console.error(`Erro: Operação ${i} ainda não tem um tipo definido após todas as tentativas de correção`);
+            return res.status(400).json({ 
+              error: 'Formato de operação inválido', 
+              details: `Operação ${i} não tem um tipo definido após tentativas de correção` 
+            });
+          }
+          
+          // Normalizar o tipo para minúsculas
+          if (typeof operations[i].type === 'string') {
+            operations[i].type = operations[i].type.toLowerCase();
+            console.log(`Operação ${i}: Tipo normalizado para ${operations[i].type}`);
+          }
+        }
+        
+        console.log('Enviando operações para editPdf:', JSON.stringify(operations));
+        const editedPdf = await editPdf(buffer, operations);
+        console.log('PDF editado com sucesso');
+        
+        res.set('Content-Type', 'application/pdf');
+        res.send(editedPdf);
+      } catch (error) {
+        console.error('Erro detalhado ao editar PDF:', error);
+        res.status(500).json({ error: 'Falha ao editar PDF', details: error.message });
+      }
     } catch (error) {
       console.error('Erro ao editar PDF:', error);
       res.status(500).json({ error: 'Falha ao editar PDF', details: error.message });

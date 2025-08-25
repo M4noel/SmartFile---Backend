@@ -52,6 +52,9 @@ const upload = multer({
   }
 });
 
+// Servir arquivos estáticos
+app.use(express.static(path.join(__dirname, '..')));
+
 // Rotas
 const router = apiRoutes(upload);
 app.use('/api', router);

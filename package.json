@@ -23,11 +23,13 @@
   "license": "ISC",
   "dependencies": {
     "archiver": "^5.3.1",
+    "axios": "^1.11.0",
     "canvas": "^3.1.2",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
     "express-fileupload": "^1.5.2",
+    "form-data": "^4.0.4",
     "multer": "^2.0.2",
     "node-cron": "^3.0.0",
     "node-fetch": "^3.3.2",
@@ -40,6 +42,7 @@
     "pdfjs-dist": "^5.4.54",
     "pdfkit": "^0.17.1",
     "qrcode": "^1.5.3",
+    "request": "^2.88.2",
     "sharp": "^0.34.3",
     "tesseract.js": "^5.1.1",
     "uuid": "^9.0.0"
