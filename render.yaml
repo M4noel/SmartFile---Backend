@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: smartfiles-backend
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: CORS_ORIGIN
+        value: https://seu-frontend.vercel.app
+      - key: SMTP_HOST
+        fromDatabase:
+          name: env
+          property: SMTP_HOST
+      - key: SMTP_PORT
+        fromDatabase:
+          name: env
+          property: SMTP_PORT
+      - key: SMTP_SECURE
+        fromDatabase:
+          name: env
+          property: SMTP_SECURE
+      - key: SMTP_USER
+        fromDatabase:
+          name: env
+          property: SMTP_USER
+      - key: SMTP_PASS
+        fromDatabase:
+          name: env
+          property: SMTP_PASS
+      - key: SMTP_FROM
+        fromDatabase:
+          name: env
+          property: SMTP_FROM

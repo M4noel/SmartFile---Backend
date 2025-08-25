@@ -1,0 +1,50 @@
+{
+  "name": "smartfiles-backend",
+  "version": "1.0.0",
+  "description": "Backend para SmartFiles - Processamento de arquivos",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=18.x"
+  },
+  "keywords": [
+    "pdf",
+    "image",
+    "compression",
+    "conversion",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "archiver": "^5.3.1",
+    "canvas": "^3.1.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "express-fileupload": "^1.5.2",
+    "multer": "^2.0.2",
+    "node-cron": "^3.0.0",
+    "node-fetch": "^3.3.2",
+    "node-qpdf": "^1.0.3",
+    "nodemailer": "^6.10.1",
+    "pdf-lib": "^1.17.1",
+    "pdf-merger-js": "^5.1.2",
+    "pdf-parse": "^1.1.1",
+    "pdf-poppler": "^0.2.1",
+    "pdfjs-dist": "^5.4.54",
+    "pdfkit": "^0.17.1",
+    "qrcode": "^1.5.3",
+    "sharp": "^0.34.3",
+    "tesseract.js": "^5.1.1",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
