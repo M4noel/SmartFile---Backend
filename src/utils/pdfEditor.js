@@ -147,26 +147,51 @@ class PdfEditor {
 
 /**
  * Função principal para edição de PDF que expõe as funcionalidades da classe PdfEditor
- * @param {Object} options - Opções para edição do PDF
+ * @param {Buffer} pdfBuffer - Buffer do PDF a ser editado
+ * @param {Array} operations - Array de operações a serem realizadas
  * @returns {Promise<Buffer>} Buffer do PDF editado
  */
-export async function editPdf(options) {
-  // Implementação da função que utiliza os métodos da classe PdfEditor
-  // baseado nas opções fornecidas
-  const { operation, pdfBuffer, ...params } = options;
-  
-  switch (operation) {
-    case 'rotate':
-      return await PdfEditor.rotatePages(pdfBuffer, params.rotations);
-    case 'split':
-      return await PdfEditor.splitPdf(pdfBuffer, params.ranges);
-    case 'addPassword':
-      return await PdfEditor.addPassword(pdfBuffer, params.password, params.options);
-    case 'removePassword':
-      return await PdfEditor.removePassword(pdfBuffer, params.password);
-    default:
-      throw new Error(`Operação não suportada: ${operation}`);
+export async function editPdf(pdfBuffer, operations) {
+  // Verifica se o buffer do PDF é válido
+  if (!pdfBuffer || !Buffer.isBuffer(pdfBuffer)) {
+    throw new Error('Buffer de PDF inválido');
   }
+
+  // Verifica se as operações são válidas
+  if (!operations || !Array.isArray(operations) || operations.length === 0) {
+    throw new Error('Operações inválidas');
+  }
+
+  let currentBuffer = pdfBuffer;
+
+  // Processa cada operação sequencialmente
+  for (const op of operations) {
+    const { type, ...params } = op;
+    
+    switch (type) {
+      case 'rotate':
+        currentBuffer = await PdfEditor.rotatePages(currentBuffer, params.rotations);
+        break;
+      case 'split':
+        // Para split, retornamos apenas o primeiro intervalo por padrão
+        // Se precisar de todos os intervalos, ajuste a lógica conforme necessário
+        const splitResults = await PdfEditor.splitPdf(currentBuffer, params.ranges);
+        if (splitResults && splitResults.length > 0) {
+          currentBuffer = splitResults[0].buffer;
+        }
+        break;
+      case 'addPassword':
+        currentBuffer = await PdfEditor.addPassword(currentBuffer, params.password, params.options);
+        break;
+      case 'removePassword':
+        currentBuffer = await PdfEditor.removePassword(currentBuffer, params.password);
+        break;
+      default:
+        throw new Error(`Operação não suportada: ${type}`);
+    }
+  }
+  
+  return currentBuffer;
 }
 
 export default PdfEditor;
