@@ -28,6 +28,11 @@ const resizeImage = async (buffer, width, height, options = {}) => {
   
   sharpInstance.resize(resizeOptions);
   
+  // Apply format if specified
+  if (options.format) {
+    sharpInstance.toFormat(options.format);
+  }
+  
   return await sharpInstance.toBuffer();
 };
 

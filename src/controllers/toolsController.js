@@ -94,7 +94,7 @@ export default {
         return res.status(400).json({ error: 'Especifique pelo menos uma dimensão válida (largura ou altura)' });
       }
 
-      const resized = await resizeImage(buffer, { width, height, format });
+      const resized = await resizeImage(buffer, width, height, { format });
 
       // Definir tipo de conteúdo apropriado
       let contentType = 'image/jpeg';
