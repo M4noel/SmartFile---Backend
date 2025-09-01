@@ -1,5 +1,6 @@
 import express from 'express';
 import toolsController from '../controllers/toolsController.js';
+import fileSizeValidator from '../middlewares/fileSizeValidator.js';
 
 export default function apiRoutes(upload) {
   const router = express.Router();
@@ -27,6 +28,20 @@ export default function apiRoutes(upload) {
 
   // Rota para editar PDF
   router.post('/edit-pdf', upload.single('pdf'), toolsController.editPdf);
+
+  // Rota para comprimir PDF
+  router.post('/compress-pdf', upload.single('pdf'), fileSizeValidator, toolsController.compressPdf);
+
+  // Rota para remover senha de PDF
+  router.post('/remove-pdf-password', upload.single('pdf'), fileSizeValidator, toolsController.removePdfPassword);
+
+  // Rota para gerar PDFs simples
+  router.post('/generate-pdf', upload.fields([
+    { name: 'image', maxCount: 1 }
+  ]), toolsController.generatePdf);
+
+  // Rota para gerar PDFs combinados
+  router.post('/generate-combined-pdf', upload.any(), toolsController.generateCombinedPdf);
 
   // Rota para gerar QR Code
   router.post('/generate-qr-code', toolsController.generateQrCode);

@@ -7,8 +7,15 @@ import { pdfToImages } from '../utils/pdfToImageConverter.js';
 import { pdfToDocument } from '../utils/pdfToDocumentConverter.js';
 import { processOcr } from '../utils/ocrProcessor.js';
 import { storeFile, retrieveFile } from '../utils/tempStorage.js';
+import PdfEditor from '../utils/pdfEditor.js';
 import nodemailer from 'nodemailer';
 import QRCode from 'qrcode';
+import fs from 'fs';
+import path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execPromise = promisify(exec);
 
 export default {
   // Compressão de imagem
@@ -178,6 +185,17 @@ export default {
                 rotations: options.rotations
               }];
               console.log('Operação de rotação construída:', operations);
+            } else if (operationType === 'imagewatermark' && req.files && req.files.watermarkImage) {
+              // Para watermark com imagem, usar o arquivo enviado
+              operations = [{
+                type: 'imagewatermark',
+                imageBuffer: req.files.watermarkImage[0].buffer,
+                opacity: options.opacity || 0.5,
+                position: options.position || 'center',
+                width: options.width || 150,
+                height: options.height || 150
+              }];
+              console.log('Operação de watermark com imagem construída:', operations);
             } else {
               // Para outros tipos de operações
               operations = [{
@@ -199,38 +217,88 @@ export default {
           const operationType = req.body.operationType;
           
           if (operationType === 'rotate' && req.body.rotations) {
-  let rotations = [];
+            let rotations = [];
 
-  try {
-    // Tenta parsear como JSON
-    const parsed = JSON.parse(req.body.rotations);
-    if (Array.isArray(parsed)) {
-      rotations = parsed;
-    } else {
-      console.error('Rotations não é um array:', parsed);
-      return res.status(400).json({ error: 'Formato de rotations inválido' });
-    }
-  } catch (e) {
-    console.error('Erro ao parsear rotations:', e);
-    return res.status(400).json({ error: 'Rotations deve ser um JSON válido' });
-  }
+            try {
+              // Tenta parsear como JSON
+              const parsed = JSON.parse(req.body.rotations);
+              if (Array.isArray(parsed)) {
+                rotations = parsed;
+              } else {
+                console.error('Rotations não é um array:', parsed);
+                return res.status(400).json({ error: 'Formato de rotations inválido' });
+              }
+            } catch (e) {
+              console.error('Erro ao parsear rotations:', e);
+              return res.status(400).json({ error: 'Rotations deve ser um JSON válido' });
+            }
 
-  // Garante que cada item tem page e degrees
-  const validRotations = rotations.filter(r => typeof r.page === 'number' && typeof r.degrees === 'number');
-  if (validRotations.length === 0) {
-    return res.status(400).json({ error: 'Nenhuma rotação válida encontrada em rotations' });
-  }
+            // Garante que cada item tem page e degrees
+            const validRotations = rotations.filter(r => typeof r.page === 'number' && typeof r.degrees === 'number');
+            if (validRotations.length === 0) {
+              return res.status(400).json({ error: 'Nenhuma rotação válida encontrada em rotations' });
+            }
 
-  operations = [{
-    type: 'rotate',
-    rotations: validRotations
-  }];
+            operations = [{
+              type: 'rotate',
+              rotations: validRotations
+            }];
 
-  console.log('Operação construída a partir de campos separados:', operations);
-} else {
-  console.log('Tipo de operação não suportado ou campos incompletos');
-  return res.status(400).json({ error: 'Tipo de operação não suportado ou campos incompletos' });
-}
+            console.log('Operação construída a partir de campos separados:', operations);
+          } else if (operationType === 'imagewatermark') {
+            // Para watermark com imagem - verificar se temos a imagem
+            if (!req.files || !req.files.watermarkImage) {
+              return res.status(400).json({ error: 'Imagem do watermark é obrigatória' });
+            }
+            
+            console.log('Arquivos recebidos para watermark:', Object.keys(req.files));
+            console.log('Campo watermarkImage:', req.files.watermarkImage);
+            console.log('Tamanho da imagem:', req.files.watermarkImage[0].size);
+            console.log('Tipo da imagem:', req.files.watermarkImage[0].mimetype);
+            
+            operations = [{
+              type: 'imagewatermark',
+              imageBuffer: req.files.watermarkImage[0].buffer,
+              opacity: parseFloat(req.body.opacity) || 0.5,
+              position: req.body.position || 'center',
+              width: parseInt(req.body.width) || 150,
+              height: parseInt(req.body.height) || 150
+            }];
+            console.log('Operação de watermark com imagem construída:', operations);
+          } else if (operationType === 'removepages' && req.body.pagesToRemove) {
+            // Para remoção de páginas
+            let pagesToRemove;
+            try {
+              pagesToRemove = typeof req.body.pagesToRemove === 'string' ? 
+                JSON.parse(req.body.pagesToRemove) : req.body.pagesToRemove;
+            } catch (e) {
+              return res.status(400).json({ error: 'Formato de pagesToRemove inválido' });
+            }
+            
+            operations = [{
+              type: 'removepages',
+              pagesToRemove: Array.isArray(pagesToRemove) ? pagesToRemove : [pagesToRemove]
+            }];
+            console.log('Operação de remoção de páginas construída:', operations);
+          } else if (operationType === 'addannotations' && req.body.comments) {
+            // Para anotações
+            let comments;
+            try {
+              comments = typeof req.body.comments === 'string' ? 
+                JSON.parse(req.body.comments) : req.body.comments;
+            } catch (e) {
+              return res.status(400).json({ error: 'Formato de comments inválido' });
+            }
+            
+            operations = [{
+              type: 'addannotations',
+              comments: Array.isArray(comments) ? comments : [comments]
+            }];
+            console.log('Operação de anotações construída:', operations);
+          } else {
+            console.log('Tipo de operação não suportado ou campos incompletos');
+            return res.status(400).json({ error: 'Tipo de operação não suportado ou campos incompletos' });
+          }
 
         } 
         // Se não temos campos separados, tentar usar o campo operations
@@ -638,6 +706,393 @@ export default {
     } catch (error) {
       console.error('Erro ao recuperar arquivo:', error);
       res.status(500).json({ error: 'Falha ao recuperar arquivo', details: error.message });
+    }
+  },
+
+  // Comprimir PDF
+  async compressPdf(req, res) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, error: 'Arquivo PDF não enviado' });
+      }
+
+      const { buffer } = req.file;
+      const { quality = 'medium' } = req.body; // low, medium, high
+
+      console.log('Comprimindo PDF com qualidade:', quality);
+      console.log('Tamanho original:', buffer.length, 'bytes');
+
+      try {
+        // Usar qpdf para compressão se disponível
+        const binPath = path.join(process.cwd(), '..', '..', 'bin', 'qpdf.exe');
+        
+        if (fs.existsSync(binPath)) {
+          // Criar arquivos temporários
+          const os = await import('os');
+          const tempDir = os.tmpdir();
+          const inputPath = path.join(tempDir, `original-${Date.now()}.pdf`);
+          const outputPath = path.join(tempDir, `compressed-${Date.now()}.pdf`);
+          
+          // Escrever o buffer em um arquivo temporário
+          await fs.promises.writeFile(inputPath, buffer);
+          
+          // Configurar qualidade de compressão
+          let compressionLevel = '--linearize'; // Compressão padrão
+          if (quality === 'low') {
+            compressionLevel = '--linearize --object-streams=disable';
+          } else if (quality === 'high') {
+            compressionLevel = '--linearize --object-streams=generate';
+          }
+          
+          // Comando para comprimir o PDF
+          const command = `"${binPath}" ${compressionLevel} "${inputPath}" "${outputPath}"`;
+          
+          await execPromise(command);
+          
+          // Ler o arquivo comprimido
+          const compressedBuffer = await fs.promises.readFile(outputPath);
+          
+          console.log('Tamanho comprimido:', compressedBuffer.length, 'bytes');
+          console.log('Redução:', Math.round((1 - compressedBuffer.length / buffer.length) * 100), '%');
+          
+          // Enviar o PDF comprimido
+          res.set('Content-Type', 'application/pdf');
+          res.set('Content-Disposition', 'attachment; filename="pdf-comprimido.pdf"');
+          res.send(compressedBuffer);
+          
+          // Limpar arquivos temporários
+          try {
+            await fs.promises.unlink(inputPath);
+            await fs.promises.unlink(outputPath);
+          } catch (cleanupError) {
+            console.warn('Erro ao limpar arquivos temporários:', cleanupError);
+          }
+        } else {
+          // Fallback: retornar o PDF original se qpdf não estiver disponível
+          console.log('qpdf não disponível, retornando PDF original');
+          res.set('Content-Type', 'application/pdf');
+          res.set('Content-Disposition', 'attachment; filename="pdf-original.pdf"');
+          res.send(buffer);
+        }
+      } catch (compressError) {
+        console.error('Erro ao comprimir PDF:', compressError);
+        // Em caso de erro, retornar o PDF original
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', 'attachment; filename="pdf-original.pdf"');
+        res.send(buffer);
+      }
+    } catch (error) {
+      console.error('Erro ao comprimir PDF:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erro interno ao comprimir PDF',
+        details: error.message
+      });
+    }
+  },
+
+  // Remover senha de PDF
+  async removePdfPassword(req, res) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, error: 'Arquivo PDF não enviado' });
+      }
+
+      const { buffer } = req.file;
+      const { password } = req.body;
+
+      if (!password) {
+        return res.status(400).json({ success: false, error: 'Senha atual do PDF é obrigatória' });
+      }
+
+      try {
+        const unprotectedBuffer = await PdfEditor.removePassword(buffer, password);
+        
+        res.set('Content-Type', 'application/pdf');
+        res.set('Content-Disposition', 'attachment; filename="pdf-sem-senha.pdf"');
+        res.send(unprotectedBuffer);
+      } catch (error) {
+        console.error('Erro ao remover senha:', error);
+        res.status(400).json({
+          success: false,
+          error: 'Falha ao remover senha. Verifique se a senha está correta.'
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao remover senha do PDF:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erro interno ao remover senha do PDF',
+        details: error.message
+      });
+    }
+  },
+
+  // Gerar PDF
+  async generatePdf(req, res) {
+    try {
+      const { type, content, title, pageSize, fontSize, tableData, tableHeaders } = req.body;
+      
+      let pdfBuffer;
+      
+      switch (type) {
+        case 'text':
+          if (!content) {
+            return res.status(400).json({ success: false, error: 'Conteúdo de texto é obrigatório' });
+          }
+          pdfBuffer = await PdfEditor.createPdfFromText(content, { title, pageSize, fontSize });
+          break;
+          
+        case 'image':
+          if (!req.files || !req.files.image) {
+            return res.status(400).json({ success: false, error: 'Imagem é obrigatória' });
+          }
+          console.log('Arquivos recebidos:', Object.keys(req.files));
+          console.log('Campo image:', req.files.image);
+          console.log('Tamanho da imagem:', req.files.image[0].size);
+          console.log('Tipo da imagem:', req.files.image[0].mimetype);
+          
+          const imageBuffer = req.files.image[0].buffer;
+          console.log('Buffer da imagem criado, tamanho:', imageBuffer.length);
+          
+          pdfBuffer = await PdfEditor.createPdfFromImages([imageBuffer], { pageSize });
+          console.log('PDF gerado com sucesso, tamanho:', pdfBuffer.length);
+          break;
+          
+        case 'table':
+          if (!tableData) {
+            return res.status(400).json({ success: false, error: 'Dados da tabela são obrigatórios' });
+          }
+          const parsedTableData = JSON.parse(tableData);
+          const parsedTableHeaders = tableHeaders ? JSON.parse(tableHeaders) : [];
+          pdfBuffer = await PdfEditor.createPdfFromTable(parsedTableData, parsedTableHeaders, { title, pageSize });
+          break;
+          
+        default:
+          return res.status(400).json({ success: false, error: `Tipo não suportado: ${type}` });
+      }
+      
+      res.set('Content-Type', 'application/pdf');
+      res.set('Content-Disposition', 'attachment; filename="documento.pdf"');
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erro interno ao gerar PDF',
+        details: error.message
+      });
+    }
+  },
+
+  // Gerar PDF combinado
+  async generateCombinedPdf(req, res) {
+    try {
+      const { title, pageSize, fontSize, contentData } = req.body;
+      
+      // Parse content data
+      const parsedContentData = JSON.parse(contentData);
+      
+      // Process content items
+      const contentItems = [];
+      let imageIndex = 0; // Track the actual image index
+      for (let i = 0; i < parsedContentData.length; i++) {
+        const item = parsedContentData[i];
+        const contentItem = {
+          type: item.type
+        };
+        
+        switch (item.type) {
+          case 'text':
+            contentItem.content = item.content || '';
+            break;
+            
+          case 'image':
+            // Find the image file for this item
+            const fieldName = `image_${imageIndex}`;
+            if (req.files && req.files[fieldName]) {
+              // Access the file by field name
+              contentItem.imageBuffer = req.files[fieldName][0].buffer;
+              imageIndex++;
+            }
+            break;
+            
+          case 'table':
+            if (item.tableData) {
+              contentItem.tableData = item.tableData;
+              contentItem.tableHeaders = item.tableHeaders || [];
+            }
+            break;
+        }
+        
+        contentItems.push(contentItem);
+      }
+      
+      // Generate combined PDF
+      const { PDFDocument, rgb } = await import('pdf-lib');
+      const pdfDoc = await PDFDocument.create();
+      
+      for (const item of contentItems) {
+        switch (item.type) {
+          case 'text':
+            if (item.content) {
+              const page = pdfDoc.addPage();
+              const { width, height } = page.getSize();
+              
+                             if (title) {
+                 page.drawText(title, {
+                   x: 50,
+                   y: height - 50,
+                   size: parseInt(fontSize || 12) + 4,
+                   color: rgb(0, 0, 0),
+                 });
+               }
+              
+              const lines = item.content.split('\n');
+              let yPosition = height - 100;
+              
+              for (const line of lines) {
+                if (yPosition < 50) {
+                  const newPage = pdfDoc.addPage();
+                  yPosition = height - 50;
+                }
+                
+                                 page.drawText(line, {
+                   x: 50,
+                   y: yPosition,
+                   size: parseInt(fontSize || 12),
+                   color: rgb(0, 0, 0),
+                 });
+                 
+                 yPosition -= parseInt(fontSize || 12) + 5;
+              }
+            }
+            break;
+            
+          case 'image':
+            if (item.imageBuffer) {
+              let image;
+              try {
+                image = await pdfDoc.embedPng(item.imageBuffer);
+              } catch (e) {
+                try {
+                  image = await pdfDoc.embedJpg(item.imageBuffer);
+                } catch (e2) {
+                  console.warn('Formato de imagem não suportado');
+                  continue;
+                }
+              }
+              
+              const page = pdfDoc.addPage();
+              const { width, height } = page.getSize();
+              
+              const imageWidth = image.width;
+              const imageHeight = image.height;
+              
+              let scaleX = width / imageWidth;
+              let scaleY = height / imageHeight;
+              const scale = Math.min(scaleX, scaleY) * 0.9;
+              
+              const scaledWidth = imageWidth * scale;
+              const scaledHeight = imageHeight * scale;
+              
+              const x = (width - scaledWidth) / 2;
+              const y = (height - scaledHeight) / 2;
+              
+              page.drawImage(image, {
+                x,
+                y,
+                width: scaledWidth,
+                height: scaledHeight,
+              });
+            }
+            break;
+            
+          case 'table':
+            if (item.tableData) {
+              const page = pdfDoc.addPage();
+              const { width, height } = page.getSize();
+              const margin = 50;
+              const tableWidth = width - (2 * margin);
+              const cellPadding = 5;
+              
+                             if (title) {
+                 page.drawText(title, {
+                   x: margin,
+                   y: height - margin,
+                   size: parseInt(fontSize || 10) + 4,
+                   color: rgb(0, 0, 0),
+                 });
+               }
+              
+              let yPosition = height - margin - 30;
+              
+              // Draw headers
+              if (item.tableHeaders && item.tableHeaders.length > 0) {
+                const columnWidth = tableWidth / item.tableHeaders.length;
+                
+                                 for (let i = 0; i < item.tableHeaders.length; i++) {
+                   page.drawText(item.tableHeaders[i], {
+                     x: margin + (i * columnWidth) + cellPadding,
+                     y: yPosition,
+                     size: parseInt(fontSize) || 10,
+                     color: rgb(0, 0, 0),
+                   });
+                 }
+                 
+                 yPosition -= parseInt(fontSize || 10) + 10;
+              }
+              
+              // Draw table data
+              for (const row of item.tableData) {
+                if (yPosition < margin + 50) {
+                  const newPage = pdfDoc.addPage();
+                  yPosition = height - margin;
+                }
+                
+                const columnWidth = tableWidth / Math.max(row.length, (item.tableHeaders || []).length || 1);
+                
+                for (let i = 0; i < row.length; i++) {
+                  const cellText = String(row[i] || '');
+                  
+                  const maxChars = Math.floor(columnWidth / ((fontSize || 10) * 0.6));
+                                     if (cellText.length > maxChars) {
+                     const truncatedText = cellText.substring(0, maxChars) + '...';
+                     page.drawText(truncatedText, {
+                       x: margin + (i * columnWidth) + cellPadding,
+                       y: yPosition,
+                       size: parseInt(fontSize) || 10,
+                       color: rgb(0, 0, 0),
+                     });
+                   } else {
+                     page.drawText(cellText, {
+                       x: margin + (i * columnWidth) + cellPadding,
+                       y: yPosition,
+                       size: parseInt(fontSize) || 10,
+                       color: rgb(0, 0, 0),
+                     });
+                   }
+                 }
+                 
+                 yPosition -= parseInt(fontSize || 10) + 5;
+              }
+            }
+            break;
+        }
+      }
+      
+      const pdfBuffer = await pdfDoc.save();
+      
+      res.set('Content-Type', 'application/pdf');
+      res.set('Content-Disposition', 'attachment; filename="documento-combinado.pdf"');
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error('Erro ao gerar PDF combinado:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erro interno ao gerar PDF combinado',
+        details: error.message
+      });
     }
   }
 };
