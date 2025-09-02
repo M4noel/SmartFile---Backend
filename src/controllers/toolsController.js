@@ -723,34 +723,44 @@ export default {
       console.log('Tamanho original:', buffer.length, 'bytes');
 
       try {
-        // Usar qpdf para compressão se disponível
-        const binPath = path.join(process.cwd(), '..', '..', 'bin', 'qpdf.exe');
+        // Verificar se o Ghostscript está instalado
+        const isGhostscriptInstalled = async () => {
+          try {
+            // Tenta executar o comando 'gs --version' para verificar se o Ghostscript está instalado
+            await execPromise('gs --version');
+            return true;
+          } catch (error) {
+            console.warn('Ghostscript não está instalado:', error.message);
+            return false;
+          }
+        };
+
+        // Criar arquivos temporários
+        const os = await import('os');
+        const tempDir = os.tmpdir();
+        const inputPath = path.join(tempDir, `original-${Date.now()}.pdf`);
         
-        if (fs.existsSync(binPath)) {
-          // Criar arquivos temporários
-          const os = await import('os');
-          const tempDir = os.tmpdir();
-          const inputPath = path.join(tempDir, `original-${Date.now()}.pdf`);
-          const outputPath = path.join(tempDir, `compressed-${Date.now()}.pdf`);
-          
-          // Escrever o buffer em um arquivo temporário
-          await fs.promises.writeFile(inputPath, buffer);
+        // Escrever o buffer em um arquivo temporário
+        await fs.promises.writeFile(inputPath, buffer);
+        
+        // Verificar se o Ghostscript está instalado
+        if (await isGhostscriptInstalled()) {
+          // Importar a biblioteca compress-pdf
+          const { compress } = await import('compress-pdf');
           
           // Configurar qualidade de compressão
-          let compressionLevel = '--linearize'; // Compressão padrão
+          // Opções: screen (72dpi), ebook (150dpi), printer (300dpi), prepress (300dpi preservando cores)
+          let resolution = 'ebook'; // Padrão - compressão média
           if (quality === 'low') {
-            compressionLevel = '--linearize --object-streams=disable';
+            resolution = 'screen'; // Baixa qualidade, maior compressão
           } else if (quality === 'high') {
-            compressionLevel = '--linearize --object-streams=generate';
+            resolution = 'prepress'; // Alta qualidade, menor compressão
           }
           
-          // Comando para comprimir o PDF
-          const command = `"${binPath}" ${compressionLevel} "${inputPath}" "${outputPath}"`;
-          
-          await execPromise(command);
-          
-          // Ler o arquivo comprimido
-          const compressedBuffer = await fs.promises.readFile(outputPath);
+          // Comprimir o PDF usando compress-pdf
+          const compressedBuffer = await compress(inputPath, {
+            resolution: resolution
+          });
           
           console.log('Tamanho comprimido:', compressedBuffer.length, 'bytes');
           console.log('Redução:', Math.round((1 - compressedBuffer.length / buffer.length) * 100), '%');
@@ -759,20 +769,46 @@ export default {
           res.set('Content-Type', 'application/pdf');
           res.set('Content-Disposition', 'attachment; filename="pdf-comprimido.pdf"');
           res.send(compressedBuffer);
-          
-          // Limpar arquivos temporários
-          try {
-            await fs.promises.unlink(inputPath);
-            await fs.promises.unlink(outputPath);
-          } catch (cleanupError) {
-            console.warn('Erro ao limpar arquivos temporários:', cleanupError);
-          }
         } else {
-          // Fallback: retornar o PDF original se qpdf não estiver disponível
-          console.log('qpdf não disponível, retornando PDF original');
-          res.set('Content-Type', 'application/pdf');
-          res.set('Content-Disposition', 'attachment; filename="pdf-original.pdf"');
-          res.send(buffer);
+          console.log('Ghostscript não está instalado, usando pdf-lib como alternativa');
+          
+          // Usar pdf-lib como alternativa para compressão básica
+          try {
+            const { PDFDocument } = await import('pdf-lib');
+            
+            // Carregar o PDF do buffer
+            const pdfDoc = await PDFDocument.load(buffer, { ignoreEncryption: true });
+            
+            // Comprimir usando pdf-lib (compressão básica)
+            const compressedPdfBytes = await pdfDoc.save({
+              useObjectStreams: quality !== 'high', // Usar streams de objetos para melhor compressão
+              addDefaultPage: false,
+              useStreamingMode: true
+            });
+            
+            const compressedBuffer = Buffer.from(compressedPdfBytes);
+            
+            console.log('Tamanho comprimido (pdf-lib):', compressedBuffer.length, 'bytes');
+            console.log('Redução (pdf-lib):', Math.round((1 - compressedBuffer.length / buffer.length) * 100), '%');
+            
+            // Enviar o PDF comprimido
+            res.set('Content-Type', 'application/pdf');
+            res.set('Content-Disposition', 'attachment; filename="pdf-comprimido.pdf"');
+            res.send(compressedBuffer);
+          } catch (pdfLibError) {
+            console.error('Erro ao usar pdf-lib:', pdfLibError);
+            // Se falhar com pdf-lib, retornar o PDF original
+            res.set('Content-Type', 'application/pdf');
+            res.set('Content-Disposition', 'attachment; filename="pdf-original.pdf"');
+            res.send(buffer);
+          }
+        }
+        
+        // Limpar arquivos temporários
+        try {
+          await fs.promises.unlink(inputPath);
+        } catch (cleanupError) {
+          console.warn('Erro ao limpar arquivos temporários:', cleanupError);
         }
       } catch (compressError) {
         console.error('Erro ao comprimir PDF:', compressError);

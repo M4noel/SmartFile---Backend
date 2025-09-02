@@ -25,6 +25,7 @@
     "archiver": "^5.3.1",
     "axios": "^1.11.0",
     "canvas": "^3.1.2",
+    "compress-pdf": "^0.5.5",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
