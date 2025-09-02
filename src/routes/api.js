@@ -27,7 +27,10 @@ export default function apiRoutes(upload) {
   router.post('/pdf-to-document', upload.single('pdf'), toolsController.pdfToDocument);
 
   // Rota para editar PDF
-  router.post('/edit-pdf', upload.single('pdf'), toolsController.editPdf);
+  router.post('/edit-pdf', upload.fields([
+    { name: 'pdf', maxCount: 1 },
+    { name: 'watermarkImage', maxCount: 1 }
+  ]), toolsController.editPdf);
 
   // Rota para comprimir PDF
   router.post('/compress-pdf', upload.single('pdf'), fileSizeValidator, toolsController.compressPdf);

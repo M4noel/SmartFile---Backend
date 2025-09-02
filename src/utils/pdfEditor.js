@@ -689,11 +689,11 @@ export async function editPdf(pdfBuffer, operations) {
       console.log(`Tipo de operação encontrado em operation.type: ${type}`);
     } else if (operation.operationType) {
       type = operation.operationType;
-      console.log(`Tipo de operação encontrado em operation.operationType: ${type}`);
+      // console.log(`Tipo de operação encontrado em operation.operationType: ${type}`);
     }
     
-    console.log(`Tipo de operação ${i}:`, type);
-    console.log(`Operação completa ${i}:`, JSON.stringify(operation));
+    // console.log(`Tipo de operação ${i}:`, type);
+    // console.log(`Operação completa ${i}:`, JSON.stringify(operation));
     
     try {
       // Imprime o tipo de operação para depuração

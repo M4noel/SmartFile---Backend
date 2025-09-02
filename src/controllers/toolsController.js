@@ -21,11 +21,12 @@ export default {
   // Compressão de imagem
   async compressImage(req, res) {
     try {
-      if (!req.file) {
+      if (!req.files || !req.files.pdf) {
         return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       }
 
-      const buffer = req.file.buffer;
+      // Obter o buffer do PDF
+      const buffer = req.files.pdf[0].buffer;
       const quality = parseInt(req.body.quality || '80', 10);
       const format = req.body.format || 'jpeg';
 
@@ -42,11 +43,11 @@ export default {
   // Conversão de imagem
   async convertImage(req, res) {
     try {
-      if (!req.file) {
+      if (!req.files || !req.files.pdf) {
         return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       }
 
-      const buffer = req.file.buffer;
+      const buffer = req.files.pdf[0].buffer;
       const format = req.body.format || 'jpeg';
       const quality = parseInt(req.body.quality || '80', 10);
 
@@ -88,11 +89,11 @@ export default {
   // Redimensionamento de imagem
   async resizeImage(req, res) {
     try {
-      if (!req.file) {
+      if (!req.files || !req.files.pdf) {
         return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       }
 
-      const buffer = req.file.buffer;
+      const buffer = req.files.pdf[0].buffer;
       const width = parseInt(req.body.width || '0', 10);
       const height = parseInt(req.body.height || '0', 10);
       const format = req.body.format || 'jpeg';
@@ -152,15 +153,16 @@ export default {
       console.log('Body operations value:', req.body.operations);
       console.log('Conteúdo completo do req.body:', req.body);
       console.log('Valor bruto de req.body.operations:', req.body.operations);
+      console.log('Files:', req.files);
       
-      if (!req.file) {
-        console.log('Erro: Nenhum arquivo enviado');
-        return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+      if (!req.files || !req.files.pdf) {
+        console.log('Erro: Nenhum arquivo PDF enviado');
+        return res.status(400).json({ error: 'Nenhum arquivo PDF enviado' });
       }
 
-      console.log('Arquivo recebido:', req.file.originalname, 'Tamanho:', req.file.size);
+      console.log('Arquivo recebido:', req.files.pdf[0].originalname, 'Tamanho:', req.files.pdf[0].size);
       
-      const buffer = req.file.buffer;
+      const buffer = req.files.pdf[0].buffer;
       let operations;
       
       // Tenta obter as operações do corpo da requisição
@@ -185,17 +187,17 @@ export default {
                 rotations: options.rotations
               }];
               console.log('Operação de rotação construída:', operations);
-            } else if (operationType === 'imagewatermark' && req.files && req.files.watermarkImage) {
+            } else if (operationType === 'watermark' && req.files && req.files.watermarkImage) {
               // Para watermark com imagem, usar o arquivo enviado
               operations = [{
                 type: 'imagewatermark',
                 imageBuffer: req.files.watermarkImage[0].buffer,
                 opacity: options.opacity || 0.5,
                 position: options.position || 'center',
-                width: options.width || 150,
-                height: options.height || 150
+                width: options.imageWidth || 150,
+                height: options.imageHeight || 150
               }];
-              console.log('Operação de watermark com imagem construída:', operations);
+              // console.log('Operação de watermark com imagem construída:', operations);
             } else {
               // Para outros tipos de operações
               operations = [{
@@ -245,12 +247,8 @@ export default {
             }];
 
             console.log('Operação construída a partir de campos separados:', operations);
-          } else if (operationType === 'imagewatermark') {
+          } else if (operationType === 'watermark' && req.files && req.files.watermarkImage) {
             // Para watermark com imagem - verificar se temos a imagem
-            if (!req.files || !req.files.watermarkImage) {
-              return res.status(400).json({ error: 'Imagem do watermark é obrigatória' });
-            }
-            
             console.log('Arquivos recebidos para watermark:', Object.keys(req.files));
             console.log('Campo watermarkImage:', req.files.watermarkImage);
             console.log('Tamanho da imagem:', req.files.watermarkImage[0].size);
@@ -261,8 +259,8 @@ export default {
               imageBuffer: req.files.watermarkImage[0].buffer,
               opacity: parseFloat(req.body.opacity) || 0.5,
               position: req.body.position || 'center',
-              width: parseInt(req.body.width) || 150,
-              height: parseInt(req.body.height) || 150
+              width: parseInt(req.body.imageWidth) || 150,
+              height: parseInt(req.body.imageHeight) || 150
             }];
             console.log('Operação de watermark com imagem construída:', operations);
           } else if (operationType === 'removepages' && req.body.pagesToRemove) {
@@ -470,11 +468,11 @@ export default {
   // Conversão de PDF para imagens
   async pdfToImages(req, res) {
     try {
-      if (!req.file) {
+      if (!req.files || !req.files.pdf) {
         return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       }
 
-      const buffer = req.file.buffer;
+      const buffer = req.files.pdf[0].buffer;
       const format = req.body.format || 'jpeg';
       const dpi = parseInt(req.body.dpi || '150', 10);
 
@@ -498,11 +496,11 @@ export default {
   // Conversão de PDF para documento
   async pdfToDocument(req, res) {
     try {
-      if (!req.file) {
+      if (!req.files || !req.files.pdf) {
         return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       }
 
-      const buffer = req.file.buffer;
+      const buffer = req.files.pdf[0].buffer;
       const format = req.body.format || 'txt';
 
       // Validar formato
@@ -539,11 +537,11 @@ export default {
   // Processamento OCR
   async ocrProcess(req, res) {
     try {
-      if (!req.file) {
+      if (!req.files || !req.files.pdf) {
         return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       }
 
-      const buffer = req.file.buffer;
+      const buffer = req.files.pdf[0].buffer;
       const language = req.body.language || 'por';
       const outputFormat = req.body.outputFormat || 'text';
 
@@ -651,12 +649,12 @@ export default {
   // Armazenamento temporário
   async storeFile(req, res) {
     try {
-      if (!req.file) {
+      if (!req.files || !req.files.pdf) {
         return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       }
 
-      const buffer = req.file.buffer;
-      const originalName = req.body.originalName || req.file.originalname;
+      const buffer = req.files.pdf[0].buffer;
+      const originalName = req.body.originalName || req.files.pdf[0].originalname;
 
       const storedFile = await storeFile(buffer, originalName);
 
@@ -712,7 +710,7 @@ export default {
   // Comprimir PDF
   async compressPdf(req, res) {
     try {
-      if (!req.file) {
+      if (!req.files || !req.files.pdf) {
         return res.status(400).json({ success: false, error: 'Arquivo PDF não enviado' });
       }
 
@@ -830,7 +828,7 @@ export default {
   // Remover senha de PDF
   async removePdfPassword(req, res) {
     try {
-      if (!req.file) {
+      if (!req.files || !req.files.pdf) {
         return res.status(400).json({ success: false, error: 'Arquivo PDF não enviado' });
       }
 
