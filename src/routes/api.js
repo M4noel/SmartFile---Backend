@@ -52,6 +52,9 @@ export default function apiRoutes(upload) {
   // Rota para contato
   router.post('/contato', toolsController.contato);
 
+  // Rota para notificação IA Tools
+  router.post('/notify-ia-tools', toolsController.notifyIaTools);
+
   // Rota para armazenamento temporário
   router.post('/temp-store', upload.single('file'), toolsController.storeFile);
   router.get('/temp-retrieve/:fileId', toolsController.retrieveFile);
