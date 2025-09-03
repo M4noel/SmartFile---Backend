@@ -21,18 +21,34 @@ export default {
   // Compressão de imagem
   async compressImage(req, res) {
     try {
-      if (!req.files || !req.files.pdf) {
-        return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+      if (!req.file) {
+        return res.status(400).json({ error: 'Nenhum arquivo de imagem enviado' });
       }
 
-      // Obter o buffer do PDF
-      const buffer = req.files.pdf[0].buffer;
+      // Obter o buffer da imagem
+      const buffer = req.file.buffer;
       const quality = parseInt(req.body.quality || '80', 10);
       const format = req.body.format || 'jpeg';
+
+      // Validar formato
+      const supportedFormats = ['jpeg', 'jpg', 'png', 'webp', 'avif'];
+      if (!supportedFormats.includes(format.toLowerCase())) {
+        return res.status(400).json({
+          error: `Formato não suportado: ${format}. Formatos suportados: ${supportedFormats.join(', ')}`
+        });
+      }
+
+      // Validar qualidade
+      if (quality < 1 || quality > 100) {
+        return res.status(400).json({
+          error: 'Qualidade deve estar entre 1 e 100'
+        });
+      }
 
       const compressed = await compressImage(buffer, { quality, format });
 
       res.set('Content-Type', `image/${format}`);
+      res.set('Content-Disposition', `attachment; filename="compressed.${format}"`);
       res.send(compressed);
     } catch (error) {
       console.error('Erro ao comprimir imagem:', error);
@@ -43,11 +59,11 @@ export default {
   // Conversão de imagem
   async convertImage(req, res) {
     try {
-      if (!req.files || !req.files.pdf) {
-        return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+      if (!req.file) {
+        return res.status(400).json({ error: 'Nenhum arquivo de imagem enviado' });
       }
 
-      const buffer = req.files.pdf[0].buffer;
+      const buffer = req.file.buffer;
       const format = req.body.format || 'jpeg';
       const quality = parseInt(req.body.quality || '80', 10);
 
@@ -89,11 +105,11 @@ export default {
   // Redimensionamento de imagem
   async resizeImage(req, res) {
     try {
-      if (!req.files || !req.files.pdf) {
-        return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+      if (!req.file) {
+        return res.status(400).json({ error: 'Nenhum arquivo de imagem enviado' });
       }
 
-      const buffer = req.files.pdf[0].buffer;
+      const buffer = req.file.buffer;
       const width = parseInt(req.body.width || '0', 10);
       const height = parseInt(req.body.height || '0', 10);
       const format = req.body.format || 'jpeg';
@@ -468,11 +484,11 @@ export default {
   // Conversão de PDF para imagens
   async pdfToImages(req, res) {
     try {
-      if (!req.files || !req.files.pdf) {
-        return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+      if (!req.file) {
+        return res.status(400).json({ error: 'Nenhum arquivo PDF enviado' });
       }
 
-      const buffer = req.files.pdf[0].buffer;
+      const buffer = req.file.buffer;
       const format = req.body.format || 'jpeg';
       const dpi = parseInt(req.body.dpi || '150', 10);
 
@@ -496,11 +512,11 @@ export default {
   // Conversão de PDF para documento
   async pdfToDocument(req, res) {
     try {
-      if (!req.files || !req.files.pdf) {
-        return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+      if (!req.file) {
+        return res.status(400).json({ error: 'Nenhum arquivo PDF enviado' });
       }
 
-      const buffer = req.files.pdf[0].buffer;
+      const buffer = req.file.buffer;
       const format = req.body.format || 'txt';
 
       // Validar formato
@@ -537,11 +553,11 @@ export default {
   // Processamento OCR
   async ocrProcess(req, res) {
     try {
-      if (!req.files || !req.files.pdf) {
+      if (!req.file) {
         return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       }
 
-      const buffer = req.files.pdf[0].buffer;
+      const buffer = req.file.buffer;
       const language = req.body.language || 'por';
       const outputFormat = req.body.outputFormat || 'text';
 
@@ -876,12 +892,12 @@ export default {
   // Armazenamento temporário
   async storeFile(req, res) {
     try {
-      if (!req.files || !req.files.pdf) {
+      if (!req.file) {
         return res.status(400).json({ error: 'Nenhum arquivo enviado' });
       }
 
-      const buffer = req.files.pdf[0].buffer;
-      const originalName = req.body.originalName || req.files.pdf[0].originalname;
+      const buffer = req.file.buffer;
+      const originalName = req.body.originalName || req.file.originalname;
 
       const storedFile = await storeFile(buffer, originalName);
 
@@ -937,7 +953,7 @@ export default {
   // Comprimir PDF
   async compressPdf(req, res) {
     try {
-      if (!req.files || !req.files.pdf) {
+      if (!req.file) {
         return res.status(400).json({ success: false, error: 'Arquivo PDF não enviado' });
       }
 
@@ -1055,7 +1071,7 @@ export default {
   // Remover senha de PDF
   async removePdfPassword(req, res) {
     try {
-      if (!req.files || !req.files.pdf) {
+      if (!req.file) {
         return res.status(400).json({ success: false, error: 'Arquivo PDF não enviado' });
       }
 
@@ -1105,15 +1121,27 @@ export default {
           break;
           
         case 'image':
-          if (!req.files || !req.files.image) {
-            return res.status(400).json({ success: false, error: 'Imagem é obrigatória' });
+          // Verificar se foi enviado como arquivo único ou múltiplos arquivos
+          let imageBuffer;
+          if (req.files && req.files.image && req.files.image.length > 0) {
+            // Múltiplos arquivos ou fields
+            console.log('Arquivos recebidos via fields:', Object.keys(req.files));
+            console.log('Campo image:', req.files.image);
+            console.log('Tamanho da imagem:', req.files.image[0].size);
+            console.log('Tipo da imagem:', req.files.image[0].mimetype);
+            
+            imageBuffer = req.files.image[0].buffer;
+          } else if (req.file && req.file.fieldname === 'image') {
+            // Arquivo único
+            console.log('Arquivo único recebido:', req.file.originalname);
+            console.log('Tamanho da imagem:', req.file.size);
+            console.log('Tipo da imagem:', req.file.mimetype);
+            
+            imageBuffer = req.file.buffer;
+          } else {
+            return res.status(400).json({ success: false, error: 'Nenhuma imagem foi enviada' });
           }
-          console.log('Arquivos recebidos:', Object.keys(req.files));
-          console.log('Campo image:', req.files.image);
-          console.log('Tamanho da imagem:', req.files.image[0].size);
-          console.log('Tipo da imagem:', req.files.image[0].mimetype);
           
-          const imageBuffer = req.files.image[0].buffer;
           console.log('Buffer da imagem criado, tamanho:', imageBuffer.length);
           
           pdfBuffer = await PdfEditor.createPdfFromImages([imageBuffer], { pageSize });
