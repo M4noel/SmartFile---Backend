@@ -1179,8 +1179,17 @@ export default {
     try {
       const { title, pageSize, fontSize, contentData } = req.body;
       
+      console.log('=== Iniciando generateCombinedPdf ===');
+      console.log('Arquivos recebidos:', req.files ? req.files.length : 0);
+      if (req.files && req.files.length > 0) {
+        req.files.forEach((file, index) => {
+          console.log(`Arquivo ${index}: fieldname=${file.fieldname}, originalname=${file.originalname}, size=${file.size}`);
+        });
+      }
+      
       // Parse content data
       const parsedContentData = JSON.parse(contentData);
+      console.log('Content items:', parsedContentData.length);
       
       // Process content items
       const contentItems = [];
@@ -1199,11 +1208,19 @@ export default {
           case 'image':
             // Find the image file for this item
             const fieldName = `image_${imageIndex}`;
-            if (req.files && req.files[fieldName]) {
-              // Access the file by field name
-              contentItem.imageBuffer = req.files[fieldName][0].buffer;
-              imageIndex++;
+            console.log(`Procurando imagem com fieldName: ${fieldName}`);
+            
+            // Com upload.any(), os arquivos ficam em um array
+            if (req.files && Array.isArray(req.files)) {
+              const imageFile = req.files.find(file => file.fieldname === fieldName);
+              if (imageFile) {
+                console.log(`Imagem encontrada: ${imageFile.originalname}, tamanho: ${imageFile.size} bytes`);
+                contentItem.imageBuffer = imageFile.buffer;
+              } else {
+                console.log(`Imagem não encontrada para fieldName: ${fieldName}`);
+              }
             }
+            imageIndex++;
             break;
             
           case 'table':
